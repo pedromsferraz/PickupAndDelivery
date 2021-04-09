@@ -1,5 +1,5 @@
 using Test, FinalProjectPedroFerraz
-using LightGraphs, SimpleWeightedGraphs, StatsBase, Random, Plots
+using LightGraphs, SimpleWeightedGraphs, StatsBase, Random #, Plots
 
 @testset "Offline algorithm tests" begin
     @testset "Simple small graph test" begin
@@ -20,20 +20,22 @@ using LightGraphs, SimpleWeightedGraphs, StatsBase, Random, Plots
 
         # Run offline algorithm tests
         min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
-        @test min_cost ≈ 58.0
-        @test end_t ≈ 60.0
+        @test min_cost ≈ 52.0
+        @test end_t ≈ 48.0
         @test opt_route == [[2], [3]]
 
         requests[2].release_time = 10
         min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
-        @test min_cost ≈ 27.0
-        @test end_t ≈ 24.0
-        @test opt_route == [[2, 3]]
+        @test min_cost ≈ 23.0
+        @test end_t ≈ 19.0
+        @test opt_route == [[2], [3]]
 
         requests[1].release_time = 10
         requests[2].release_time = 50
         min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
-        @test min_cost ≈ 73.0
+        @test min_cost ≈ 67.0
+        @test end_t ≈ 58.0
+        @test opt_route == [[2], [3]]
     end
 
     @testset "Unordered requests" begin
@@ -53,10 +55,32 @@ using LightGraphs, SimpleWeightedGraphs, StatsBase, Random, Plots
         capacity = 2
 
         # Run offline algorithm tests
-        OfflineAlgorithm.precompute_best_paths(g)
         min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
         @test min_cost ≈ 105.0
         @test end_t ≈ 203.0
+        @test opt_route == [[2], [3]]
+    end
+
+    @testset "Big edge weight" begin
+        # Create simple weighted graph
+        srcs = [1, 1, 2]
+        dsts = [2, 3, 3]
+        wgts = [1., 1000., 1.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 2
+        release_times = [0, 1000]
+        request_vertices = [2, 3]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 2
+
+        # Run offline algorithm tests
+        min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
+        @test min_cost ≈ 1003.0
+        @test end_t ≈ 1004.0
         @test opt_route == [[2], [3]]
     end
 
@@ -69,9 +93,9 @@ using LightGraphs, SimpleWeightedGraphs, StatsBase, Random, Plots
         points = hcat([0, 0], points)
 
         # Plot points for verification
-        plot = Plots.plot(points[1, :], points[2, :], seriestype = :scatter, legend = false)
-        mkpath("images")
-        Plots.savefig(plot, "images/points.pdf")
+        # plot = Plots.plot(points[1, :], points[2, :], seriestype = :scatter, legend = false)
+        # mkpath("images")
+        # Plots.savefig(plot, "images/points.pdf")
 
         # Create simple weighted graph from euclidean graph
         g, dists = euclidean_graph(points, p=2)
@@ -92,8 +116,6 @@ using LightGraphs, SimpleWeightedGraphs, StatsBase, Random, Plots
         requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
 
         # Run offline algorithm tests
-        OfflineAlgorithm.precompute_best_paths(g)
-
         capacity = 5
         min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
         @test opt_route == [sort(request_vertices)]

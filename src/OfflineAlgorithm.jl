@@ -6,6 +6,12 @@ using ..DataModel, LightGraphs, SimpleWeightedGraphs, Combinatorics
 # Maps a set of vertices to the path of minimum cost on the graph
 opt_paths = Dict{Vector{Int64}, Vector{Int64}}()
 
+# Distances between vertices
+dists = Array{Float64, 2}(undef, 0, 2)
+
+# Last graph ran by the algorithm
+global_graph = SimpleWeightedGraph()
+
 # Returns cost of path
 function path_cost(graph::SimpleWeightedGraph, 
                     path::Vector{Int}, 
@@ -14,11 +20,11 @@ function path_cost(graph::SimpleWeightedGraph,
     cur_t = initial_time
     current = 1
     for vertex in path
-        cur_t += graph.weights[current, vertex]
+        cur_t += dists[current, vertex]
         cost += cur_t
         current = vertex
     end
-    cur_t += graph.weights[current, 1]
+    cur_t += dists[current, 1]
     return cost, cur_t
 end
 
@@ -52,8 +58,10 @@ end
 
 # Preprocesses graph with best path for every subset of vertices
 # Subsequent queries only have to calculate the cost of the precomputed paths
+# TODO: precomputed path cost query in O(1)
 function precompute_best_paths(graph::SimpleWeightedGraph)
     global opt_paths = Dict()
+    global dists = floyd_warshall_shortest_paths(graph, graph.weights).dists
     N = nv(graph)
     vertices = [2:N...]
     
@@ -77,13 +85,15 @@ function precompute_best_paths(graph::SimpleWeightedGraph)
 
         opt_paths[subset] = opt_path
     end
+
+    global global_graph = graph
 end
 
-# Brute-force optimal offline algorithm
-function run(graph::SimpleWeightedGraph, 
-                requests::Vector{Request}, 
-                capacity::Int64, 
-                initial_t::Float64=0.0)
+# Brute-force offline optimal algorithm recursive function
+function offline_algorithm(graph::SimpleWeightedGraph, 
+                        requests::Vector{Request}, 
+                        capacity::Int64, 
+                        initial_t::Float64=0.0)
     N = length(requests)
     min_cost = Inf64
     end_t = initial_t
@@ -123,7 +133,7 @@ function run(graph::SimpleWeightedGraph,
                 # Fulfill remaining requests recursively
                 if (k+1 <= N)
                     remaining_requests = filter(request -> !(request in requests_perm[1:k]), requests)
-                    rec_cost, time, rec_route = run(graph, remaining_requests, capacity, time)
+                    rec_cost, time, rec_route = offline_algorithm(graph, remaining_requests, capacity, time)
                     cost += rec_cost
                     route = vcat(route, rec_route)
                 end
@@ -146,6 +156,17 @@ function run(graph::SimpleWeightedGraph,
     end
 
     return min_cost, end_t, opt_route
+end
+
+# Run brute-force optimal offline algorithm
+function run(graph::SimpleWeightedGraph, 
+                requests::Vector{Request}, 
+                capacity::Int64)
+    global global_graph
+    if graph != global_graph
+        precompute_best_paths(graph)
+    end
+    return offline_algorithm(graph, requests, capacity)
 end
 
 end # module
