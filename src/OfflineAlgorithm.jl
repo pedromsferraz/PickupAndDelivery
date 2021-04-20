@@ -1,93 +1,6 @@
 module OfflineAlgorithm
 
-using ..DataModel, LightGraphs, SimpleWeightedGraphs, Combinatorics
-
-# Used for preprocessing vertices optimal paths
-# Maps a set of vertices to the path of minimum cost on the graph
-opt_paths = Dict{Vector{Int64}, Vector{Int64}}()
-
-# Distances between vertices
-dists = Array{Float64, 2}(undef, 0, 2)
-
-# Last graph ran by the algorithm
-global_graph = SimpleWeightedGraph()
-
-# Returns cost of path
-function path_cost(graph::SimpleWeightedGraph, 
-                    path::Vector{Int}, 
-                    initial_time::Float64=0.0)
-    cost = 0.0
-    cur_t = initial_time
-    current = 1
-    for vertex in path
-        cur_t += dists[current, vertex]
-        cost += cur_t
-        current = vertex
-    end
-    cur_t += dists[current, 1]
-    return cost, cur_t
-end
-
-# Finds the path that minimizes sum of times to reach each vertex
-function best_path(graph::SimpleWeightedGraph, 
-                    vertices::Vector{Int}, 
-                    initial_time::Float64=0.0)
-    min_cost = Inf64
-    end_time = Inf64
-    opt_path = Vector{Int64}()
-
-    s_vertices = sort(vertices)
-    global opt_paths
-    if haskey(opt_paths, s_vertices)
-        min_cost, end_time = path_cost(graph, opt_paths[s_vertices], initial_time)
-        return min_cost, end_time, opt_paths[s_vertices]
-    end
-
-    for permutation in permutations(vertices)
-        cost, time = path_cost(graph, permutation, initial_time)
-        if (cost < min_cost)
-            min_cost = cost
-            end_time = time # time is the same for every path
-            opt_path = permutation
-        end
-    end
-
-    opt_paths[s_vertices] = opt_path
-    return min_cost, end_time, opt_path
-end
-
-# Preprocesses graph with best path for every subset of vertices
-# Subsequent queries only have to calculate the cost of the precomputed paths
-# TODO: precomputed path cost query in O(1)
-function precompute_best_paths(graph::SimpleWeightedGraph)
-    global opt_paths = Dict()
-    global dists = floyd_warshall_shortest_paths(graph, graph.weights).dists
-    N = nv(graph)
-    vertices = [2:N...]
-    
-    for subset in powerset(vertices)
-        if length(subset) < 2
-            continue
-        end
-
-        min_cost = Inf64
-        end_time = Inf64
-        opt_path = Vector{Int64}()
-        
-        for permutation in permutations(subset)
-            cost, time = path_cost(graph, permutation)
-            if (cost < min_cost)
-                min_cost = cost
-                end_time = time # time is the same for every path
-                opt_path = permutation
-            end
-        end
-
-        opt_paths[subset] = opt_path
-    end
-
-    global global_graph = graph
-end
+using ..DataModel, ..Graph, SimpleWeightedGraphs, Combinatorics
 
 # Brute-force offline optimal algorithm recursive function
 function offline_algorithm(graph::SimpleWeightedGraph, 
@@ -126,7 +39,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
 
                 # Wait and fulfill first k requests
                 ful_vert = vertices[1:k]
-                path_cost, time, path = best_path(graph, ful_vert, time)
+                path_cost, time, path = Graph.best_path(ful_vert, time)
                 cost += path_cost
                 push!(route, path)
 
@@ -162,10 +75,7 @@ end
 function run(graph::SimpleWeightedGraph, 
                 requests::Vector{Request}, 
                 capacity::Int64)
-    global global_graph
-    if graph != global_graph
-        precompute_best_paths(graph)
-    end
+    Graph.preprocess(graph)
     return offline_algorithm(graph, requests, capacity)
 end
 
