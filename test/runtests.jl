@@ -139,3 +139,31 @@ using LightGraphs, SimpleWeightedGraphs, StatsBase, Random #, Plots
         @test opt_route == map(el -> [el], sort(request_vertices))
     end
 end
+
+@testset "Online algorithm Wait And Ignore tests" begin
+    @testset "Simple small graph test" begin
+        # Create simple weighted graph
+        srcs = [1, 1, 2]
+        dsts = [2, 3, 3]
+        wgts = [10., 4., 7.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 2
+        release_times = [0, 5]
+        request_vertices = [2, 3]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 2
+
+        # Run Wait And Ignore algorithm tests
+        min_cost, end_t, opt_route = OfflineAlgorithm.run(g, requests, capacity)
+        cost, end_t, route = WaitAndIgnore.run(g, requests, capacity)
+
+        @test cost ≈ 32.0
+        @test end_t ≈ 33.0
+        @test route == [[3], [2]]
+        @test cost / min_cost ≈ 1.28
+    end
+end

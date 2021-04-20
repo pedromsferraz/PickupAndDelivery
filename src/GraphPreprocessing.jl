@@ -1,4 +1,4 @@
-module Graph
+module GraphPreprocessing
 
 using LightGraphs, SimpleWeightedGraphs, Combinatorics
 

@@ -1,12 +1,12 @@
 module OfflineAlgorithm
 
-using ..DataModel, ..Graph, SimpleWeightedGraphs, Combinatorics
+using ..DataModel, ..GraphPreprocessing, SimpleWeightedGraphs, Combinatorics
 
 # Brute-force offline optimal algorithm recursive function
 function offline_algorithm(graph::SimpleWeightedGraph, 
                         requests::Vector{Request}, 
                         capacity::Int64, 
-                        initial_t::Float64=0.0)
+                        initial_t::Float64)
     N = length(requests)
     min_cost = Inf64
     end_t = initial_t
@@ -39,7 +39,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
 
                 # Wait and fulfill first k requests
                 ful_vert = vertices[1:k]
-                path_cost, time, path = Graph.best_path(ful_vert, time)
+                path_cost, time, path = GraphPreprocessing.best_path(ful_vert, time)
                 cost += path_cost
                 push!(route, path)
 
@@ -74,9 +74,10 @@ end
 # Run brute-force optimal offline algorithm
 function run(graph::SimpleWeightedGraph, 
                 requests::Vector{Request}, 
-                capacity::Int64)
-    Graph.preprocess(graph)
-    return offline_algorithm(graph, requests, capacity)
+                capacity::Int64,
+                initial_t::Float64=0.0)
+    GraphPreprocessing.preprocess(graph)
+    return offline_algorithm(graph, requests, capacity, initial_t)
 end
 
 end # module
