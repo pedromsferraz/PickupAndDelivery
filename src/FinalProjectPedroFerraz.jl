@@ -1,6 +1,6 @@
 module FinalProjectPedroFerraz
 
-export DataModel, GraphPreprocessing, OfflineAlgorithm, WaitAndIgnore
+export DataModel, GraphPreprocessing, OfflineAlgorithm, WaitAndIgnore, WaitAndReturn
 
 include("DataModel.jl")
 using .DataModel
@@ -13,5 +13,8 @@ using .OfflineAlgorithm
 
 include("WaitAndIgnore.jl")
 using .WaitAndIgnore
+
+include("WaitAndReturn.jl")
+using .WaitAndReturn
 
 end # module

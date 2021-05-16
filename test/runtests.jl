@@ -167,3 +167,29 @@ end
         @test cost / min_cost ≈ 1.28
     end
 end
+
+@testset "Online algorithm Wait And Return tests" begin
+    @testset "Simple small graph test" begin
+        # Create simple weighted graph
+        srcs = [1,   1,   1,   1,   1,   2,   3]
+        dsts = [2,   3,   4,   5,   6,   3,   4]
+        wgts = [10., 10., 40., 10., 10., 10., 20.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 5
+        release_times = [30, 30, 30, 45, 55]
+        request_vertices = [2, 3, 4, 5, 6]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 10
+        
+        # Run Wait And Return algorithm tests
+        cost, end_t, route = WaitAndReturn.run(g, requests, capacity)
+
+        @test cost ≈ 410.0
+        @test end_t ≈ 170.0
+        @test route == [[2, 3], [5, 6, 4]]
+    end
+end
