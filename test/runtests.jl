@@ -125,7 +125,7 @@ using LightGraphs, SimpleWeightedGraphs, StatsBase, Random #, Plots
         @test opt_route == map(el -> [el], sort(request_vertices))
 
         # Define requests with out of order release times
-        release_times = shuffle([1:N_req...] .* 0.01)
+        release_times = shuffle([1:N_req...] .* 0.0001)
         request_vertices = sample(2:nv(g), N_req ,replace=false)
         requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
 
@@ -191,5 +191,141 @@ end
         @test cost ≈ 410.0
         @test end_t ≈ 170.0
         @test route == [[2, 3], [5, 6, 4]]
+    end
+end
+
+@testset "MILP model for offline algorithm" begin
+    @testset "Small graph with only one route" begin 
+        # Create simple weighted graph
+        srcs = [1,   1,   1,   2,   4 ]
+        dsts = [2,   3,   4,   3,   3 ]
+        wgts = [10., 20., 5.,  8.,  5.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 2
+        release_times = zeros(N_req)
+        request_vertices = [2, 3]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = N_req
+
+        # Run MILP offline algorithm tests
+        min_cost, end_t = MilpOfflineAlgorithm.run(g, requests, capacity)
+        @test min_cost ≈ 28.0
+        @test end_t ≈ 28.0
+    end
+
+    @testset "Different capacities and different routes" begin
+        # Create simple weighted graph
+        srcs = [1,   1,   1,   1,   1,   2,   3]
+        dsts = [2,   3,   4,   5,   6,   3,   4]
+        wgts = [10., 10., 40., 10., 10., 10., 20.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 3
+        release_times = [0, 0, 0]
+        request_vertices = [2, 3, 5]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity and run MILP offline algorithm tests
+        capacity = 3
+        min_cost, end_t = MilpOfflineAlgorithm.run(g, requests, capacity)
+        @test min_cost ≈ 70.0
+        @test end_t ≈ 50.0
+
+        capacity = 2
+        min_cost, end_t = MilpOfflineAlgorithm.run(g, requests, capacity)
+        @test min_cost ≈ 70.0
+        @test end_t ≈ 50.0
+
+        capacity = 1
+        min_cost, end_t = MilpOfflineAlgorithm.run(g, requests, capacity)
+        @test min_cost ≈ 90.0
+        @test end_t ≈ 60.0
+    end
+
+    @testset "Reverse path" begin
+        # Create simple weighted graph
+        srcs = [1,   1,     1,  2  ]
+        dsts = [2,   3,     4,  3  ]
+        wgts = [10., 1000., 100., 20.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 2
+        release_times = zeros(N_req)
+        request_vertices = [3, 4]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 1
+
+        # Run MILP offline algorithm tests
+        min_cost, end_t = MilpOfflineAlgorithm.run(g, requests, capacity)
+
+        @test min_cost ≈ 190.0
+        @test end_t ≈ 260.0
+    end
+
+    @testset "Initial time" begin
+        # Create simple weighted graph
+        srcs = [1,   1,     1,  2  ]
+        dsts = [2,   3,     4,  3  ]
+        wgts = [10., 1000., 100., 20.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 2
+        release_times = zeros(N_req)
+        request_vertices = [3, 4]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 1
+
+        # Define initial time
+        initial_t = 50.0
+
+        # Run MILP offline algorithm tests
+        min_cost, end_t = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
+
+        @test min_cost ≈ 290.0
+        @test end_t ≈ 310.0
+    end
+
+    @testset "Random euclidean graph instance" begin
+        # Create an euclidean graph 
+        g, dists = euclidean_graph(6, 2, p=2)
+        srcs = Vector{Int}()
+        dsts = Vector{Int}()
+        weights = Vector{Float64}()
+        for e in dists
+            push!(srcs, e.first.src)
+            push!(dsts, e.first.dst)
+            push!(weights, e.second)
+        end
+        g = SimpleWeightedGraph(srcs, dsts, weights);
+        
+        # Define requests
+        N_req = 4
+        max_weight = maximum(weights)
+        release_times = repeat([max_weight], N_req)
+        request_vertices = sample(2:nv(g), N_req ,replace=false)
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define initial time
+        initial_t = max_weight
+
+        # Test for different capacities
+        for capacity in 1:N_req
+            # Run MILP offline algorithm tests
+            min_cost_milp, end_t_milp = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
+            min_cost_brute_force, end_t_brute, opt_route = OfflineAlgorithm.run(g, requests, capacity, initial_t)
+
+            @test min_cost_milp ≈ min_cost_brute_force
+        end
     end
 end

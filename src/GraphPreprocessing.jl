@@ -9,9 +9,6 @@ opt_paths = Dict{Vector{Int64}, Vector{Int64}}()
 # Distances between vertices
 dists = Array{Float64, 2}(undef, 0, 2)
 
-# Last graph preprocessed
-preprocessed_graph = SimpleWeightedGraph()
-
 # Returns cost of path
 # Assumes distances array has already been filled
 function path_cost(path::Vector{Int}, 
@@ -55,17 +52,16 @@ function best_path(vertices::Vector{Int},
     return min_cost, end_time, opt_path
 end
 
+function preprocess_dists(graph::SimpleWeightedGraph)
+    global dists = floyd_warshall_shortest_paths(graph, graph.weights).dists
+end
+
 # Preprocesses graph with best path for every subset of vertices
 # Subsequent queries only have to calculate the cost of the precomputed paths
 # TODO: precomputed path cost query in O(1)
 function preprocess(graph::SimpleWeightedGraph)
-    global preprocessed_graph
-    if preprocessed_graph == graph
-        return
-    end
-    
     global opt_paths = Dict()
-    global dists = floyd_warshall_shortest_paths(graph, graph.weights).dists
+    preprocess_dists(graph)
     N = nv(graph)
     vertices = [2:N...]
     
@@ -89,8 +85,6 @@ function preprocess(graph::SimpleWeightedGraph)
 
         opt_paths[subset] = opt_path
     end
-
-    preprocessed_graph = graph
 end
 
 end # module
