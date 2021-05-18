@@ -322,10 +322,38 @@ end
         # Test for different capacities
         for capacity in 1:N_req
             # Run MILP offline algorithm tests
-            min_cost_milp, end_t_milp = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
-            min_cost_brute_force, end_t_brute, opt_route = OfflineAlgorithm.run(g, requests, capacity, initial_t)
+            min_cost_milp, end_t_milp, opt_route_milp = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
+            min_cost_brute_force, end_t_brute_force, opt_route_brute_force = OfflineAlgorithm.run(g, requests, capacity, initial_t)
 
-            @test min_cost_milp ≈ min_cost_brute_force
+            @test isapprox(min_cost_milp, min_cost_brute_force, atol=1e-4)
         end
+    end
+
+    @testset "Optimal route has large k" begin
+        # Create simple weighted graph
+        srcs = [1,  1,  1,  1,   3]
+        dsts = [2,  3,  4,  5,   4]
+        wgts = [1., 2., 2., 10., 1.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 4
+        max_weight = maximum(wgts)
+        release_times = repeat([max_weight], N_req)
+        request_vertices = sample(2:nv(g), N_req ,replace=false)
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 2
+        
+        # Define initial time
+        initial_t = max_weight
+
+        # Run MILP offline algorithm tests
+        min_cost_milp, end_t_milp, opt_route_milp = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
+        min_cost_brute_force, end_t_brute_force, opt_route_brute_force = OfflineAlgorithm.run(g, requests, capacity, initial_t)
+
+        @test min_cost_milp ≈ min_cost_brute_force
+        @test end_t_milp ≈ end_t_brute_force
     end
 end
