@@ -7,18 +7,19 @@ module MilpOfflineAlgorithm
 # Pkg.build("Gurobi")
 using ..DataModel, ..GraphPreprocessing, LightGraphs, SimpleWeightedGraphs, JuMP, Gurobi
 
-function get_route(x::Array{Float64,3}, d::Vector{Float64})
+function get_route(x::Array{Float64,3}, d::Vector{Int64})
     route = Vector{Vector{Int64}}()
     N = size(x, 1)
     Kmax = size(x, 3)
 
+    original_vertices = findall(x -> x == 1, d)
     for k in 1:Kmax
         k_route = Vector{Int64}()
         i = 1
         while i != N
             i = findfirst(e -> e ≈ 1.0, value.(x[i, :, k]))
-            if d[i] == 1
-                push!(k_route, i)
+            if i != N
+                push!(k_route, original_vertices[i-1])
             end
         end
         if length(k_route) > 0
@@ -29,15 +30,9 @@ function get_route(x::Array{Float64,3}, d::Vector{Float64})
     return route
 end
 
-# Mixed-integer programming implementation of offline algorithm
-# Note: This version assume all requests are already active
-function offline_algorithm(graph::SimpleWeightedGraph, 
-                            requests::Vector{Request}, 
-                            capacity::Int64, 
-                            initial_t::Float64)
+function preprocess_graph(graph::SimpleWeightedGraph, d::Vector{Int64})
     g = copy(graph)
-    Kmin = ceil(Int, length(requests) / capacity)
-    N = nv(g)
+    N = nv(graph)
 
     # add n+1 vertex
     add_vertex!(g)
@@ -45,14 +40,36 @@ function offline_algorithm(graph::SimpleWeightedGraph,
         add_edge!(g, adj, N+1, g.weights[1, adj])
     end
     add_edge!(g, 1, N+1, 1e-100)
-    GraphPreprocessing.preprocess_dists(g)
+    g = GraphPreprocessing.distance_graph(g)
+
+    # remove unused vertices
+    for i in Iterators.reverse(2:N)
+        if d[i] == 0
+            rem_vertex!(g, i)
+        end
+    end
+    
+    return g
+end
+
+# Mixed-integer programming implementation of offline algorithm
+# Note: This version assume all requests are already active
+function offline_algorithm(graph::SimpleWeightedGraph, 
+                            requests::Vector{Request}, 
+                            capacity::Int64, 
+                            initial_t::Float64)
+    Kmin = ceil(Int, length(requests) / capacity)
+    N = nv(graph)
 
     # d[i] = 1 if there is demand on node i, 0 otherwise
-    d = zeros(N+1)
+    d = zeros(Int, N)
     for request in requests
         d[request.destination] = 1
     end
-    
+    g = preprocess_graph(graph, d)
+
+    N = nv(g) - 1
+
     min_cost = Inf
     end_t = Inf
     opt_route = Vector{Vector{Int64}}()
@@ -60,6 +77,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
     # iterate through all possible 
     for Kmax in Kmin:length(requests)
         model = Model(Gurobi.Optimizer)
+        set_silent(model)
 
         # x[i, j, k] -> if edge (i, j) is being used in route k
         @variable(model, x[1:N+1, 1:N+1, 1:Kmax], Bin)
@@ -68,14 +86,12 @@ function offline_algorithm(graph::SimpleWeightedGraph,
         @variable(model, ω[1:N+1, 1:Kmax] >= 0.0)
 
         # objective: minimize sum of serving time for every request
-        @objective(model, Min, sum(d[i] * sum(ω[i, k] for k in 1:Kmax) for i in 2:N))
+        @objective(model, Min, sum(sum(ω[i, k] for k in 1:Kmax) for i in 2:N))
 
         # each request i must be assigned to a unique route k
         for i in 2:N
             adj = outneighbors(g, i)
-            if d[i] == 1
-                @constraint(model, sum(sum(x[i, j, k] for j in adj) for k in 1:Kmax) == 1)
-            end
+            @constraint(model, sum(sum(x[i, j, k] for j in adj) for k in 1:Kmax) == 1)
         end
 
         # flow constraints
@@ -93,7 +109,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
         end
 
         for k in 1:Kmax
-            adj = inneighbors(g, 1)
+            adj = inneighbors(g, N+1)
             @constraint(model, sum(x[i, N+1, k] for i in adj) == 1)
         end
 
@@ -102,7 +118,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
             for edge in edges(g)
                 i = src(edge)
                 j = dst(edge)
-                t_ij = GraphPreprocessing.dists[i, j]
+                t_ij = weight(edge)
                 @constraint(model, x[i, j, k] => { ω[i, k] + t_ij - ω[j, k] <= 0 })
                 @constraint(model, x[j, i, k] => { ω[j, k] + t_ij - ω[i, k] <= 0 })
             end
@@ -110,7 +126,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
 
         # capacity constraints
         for k in 1:Kmax
-            @constraint(model, sum(d[i] * sum(x[i, j, k] for j in outneighbors(g, i)) for i in 2:N) <= capacity)
+            @constraint(model, sum(sum(x[i, j, k] for j in outneighbors(g, i)) for i in 2:N) <= capacity)
         end
 
         # single vehicle constraint
@@ -123,7 +139,9 @@ function offline_algorithm(graph::SimpleWeightedGraph,
 
         optimize!(model)
         
-        if termination_status(model) == MOI.OPTIMAL && objective_value(model) < min_cost 
+        if termination_status(model) == MOI.OPTIMAL &&
+                !isapprox(objective_value(model), min_cost, atol=1e-3) && 
+                objective_value(model) < min_cost 
             min_cost = objective_value(model)
             end_t = value(ω[N+1, Kmax])
             opt_route = get_route(value.(x), d)

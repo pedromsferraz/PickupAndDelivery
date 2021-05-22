@@ -298,7 +298,7 @@ end
 
     @testset "Random euclidean graph instance" begin
         # Create an euclidean graph 
-        g, dists = euclidean_graph(6, 2, p=2)
+        g, dists = euclidean_graph(8, 2, p=2)
         srcs = Vector{Int}()
         dsts = Vector{Int}()
         weights = Vector{Float64}()
@@ -310,10 +310,10 @@ end
         g = SimpleWeightedGraph(srcs, dsts, weights);
         
         # Define requests
-        N_req = 4
+        N_req = 5
         max_weight = maximum(weights)
         release_times = repeat([max_weight], N_req)
-        request_vertices = sample(2:nv(g), N_req ,replace=false)
+        request_vertices = sample(2:nv(g), N_req, replace=false)
         requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
 
         # Define initial time
@@ -340,7 +340,7 @@ end
         N_req = 4
         max_weight = maximum(wgts)
         release_times = repeat([max_weight], N_req)
-        request_vertices = sample(2:nv(g), N_req ,replace=false)
+        request_vertices = sample(2:nv(g), N_req, replace=false)
         requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
 
         # Define capacity

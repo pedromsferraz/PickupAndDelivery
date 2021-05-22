@@ -52,6 +52,17 @@ function best_path(vertices::Vector{Int},
     return min_cost, end_time, opt_path
 end
 
+function distance_graph(graph::SimpleWeightedGraph)
+    g = SimpleWeightedGraph(nv(graph))
+    dists = floyd_warshall_shortest_paths(graph, graph.weights).dists
+    for i in 1:nv(graph)
+        for j in i+1:nv(graph)
+            add_edge!(g, i, j, dists[i, j])
+        end
+    end
+    return g
+end
+
 function preprocess_dists(graph::SimpleWeightedGraph)
     global dists = floyd_warshall_shortest_paths(graph, graph.weights).dists
 end
