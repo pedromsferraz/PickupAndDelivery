@@ -8,7 +8,7 @@ module MilpOfflineAlgorithm
 using ..DataModel, ..GraphPreprocessing, LightGraphs, SimpleWeightedGraphs, JuMP, Gurobi
 
 function get_route(x::Array{Float64,3}, d::Vector{Int64})
-    route = Vector{Vector{Int64}}()
+    subgraph_route = Vector{Vector{Int64}}()
     N = size(x, 1)
     Kmax = size(x, 3)
 
@@ -19,15 +19,23 @@ function get_route(x::Array{Float64,3}, d::Vector{Int64})
         while i != N
             i = findfirst(e -> e ≈ 1.0, value.(x[i, :, k]))
             if i != N
-                push!(k_route, original_vertices[i-1])
+                push!(k_route, i)
             end
         end
         if length(k_route) > 0
-            push!(route, k_route)
+            push!(subgraph_route, k_route)
         end
     end
 
-    return route
+    recover_vertex(i::Int) = original_vertices[i]
+    route = map(i -> recover_vertex.(i .- 1), subgraph_route)
+
+    return route, subgraph_route
+end
+
+function get_end_t(g, subgraph_route, ω, Kmax)
+    subgraph_last_vertex = collect(Iterators.flatten(subgraph_route))[end]
+    return value(ω[subgraph_last_vertex, Kmax]) + g.weights[subgraph_last_vertex, 1]
 end
 
 function preprocess_graph(graph::SimpleWeightedGraph, d::Vector{Int64})
@@ -141,10 +149,10 @@ function offline_algorithm(graph::SimpleWeightedGraph,
         
         if termination_status(model) == MOI.OPTIMAL &&
                 !isapprox(objective_value(model), min_cost, atol=1e-3) && 
-                objective_value(model) < min_cost 
+                objective_value(model) < min_cost
             min_cost = objective_value(model)
-            end_t = value(ω[N+1, Kmax])
-            opt_route = get_route(value.(x), d)
+            opt_route, subgraph_route = get_route(value.(x), d)
+            end_t = get_end_t(g, subgraph_route, ω, Kmax)
         end
     end
 
