@@ -13,6 +13,7 @@ for e in edges(graph)
     push!(weights, w);
 end
 
+using GraphPlot, Cairo, Compose
 # Plot the graph
 mkpath("images")
 plot = gplot(g, nodelabel=1:nv(g), 

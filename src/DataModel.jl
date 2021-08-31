@@ -1,7 +1,11 @@
 module DataModel
 
 import Base: isless, ==
-export Request
+export Request, RequestLimit
+
+struct RequestLimit <: Exception 
+    msg::String
+end
 
 mutable struct Request
     # Time at which request is released

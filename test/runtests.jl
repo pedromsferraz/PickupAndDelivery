@@ -173,7 +173,7 @@ end
         # Create simple weighted graph
         srcs = [1,   1,   1,   1,   1,   2,   3]
         dsts = [2,   3,   4,   5,   6,   3,   4]
-        wgts = [10., 10., 40., 10., 10., 10., 20.]
+        wgts = [10., 10., 25., 10., 10., 10., 20.]
         g = SimpleWeightedGraph(srcs, dsts, wgts);
 
         # Define requests
@@ -187,10 +187,47 @@ end
         
         # Run Wait And Return algorithm tests
         cost, end_t, route = WaitAndReturn.run(g, requests, capacity)
+        cost, end_t, route = ComputeReturn.run(g, requests, capacity)
 
-        @test cost ≈ 410.0
-        @test end_t ≈ 170.0
-        @test route == [[2, 3], [5, 6, 4]]
+        @test cost ≈ 405.0
+        @test end_t ≈ 160.0
+        @test route == [[2, 3, 0], [5, 6, 4]] || route == [[2, 3, 0], [5], [6], [4]]
+    end
+end
+
+@testset "Online algorithm Compute Return tests" begin
+    @testset "Simple small graph test" begin
+        # Create simple weighted graph
+        srcs = [1,   1,   1,   2,   3]
+        dsts = [2,   3,   4,   3,   4]
+        wgts = [10., 15., 15., 20., 1.]
+        g = SimpleWeightedGraph(srcs, dsts, wgts);
+
+        # Define requests
+        N_req = 3
+        release_times = [20, 20, 34]
+        request_vertices = [2, 3, 4]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+
+        # Define capacity
+        capacity = 10
+
+        # Run Wait And Return algorithm tests
+        cost, end_t, route = ComputeReturn.run(g, requests, capacity)
+
+        plot_instance(points, release_times)
+
+        @test cost ≈ 157.0
+        @test end_t ≈ 79.0
+        @test route == [[2, 0], [3, 4]]
+
+        release_times = [20, 20, 35]
+        requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
+        cost, end_t, route = ComputeReturn.run(g, requests, capacity)
+
+        @test cost ≈ 160.0
+        @test end_t ≈ 95.0
+        @test route == [[2, 3], [4]]
     end
 end
 
@@ -298,7 +335,7 @@ end
 
     @testset "Random euclidean graph instance" begin
         # Create an euclidean graph 
-        g, dists = euclidean_graph(8, 2, p=2)
+        g, dists = euclidean_graph(12, 2, p=2)
         srcs = Vector{Int}()
         dsts = Vector{Int}()
         weights = Vector{Float64}()
@@ -310,9 +347,10 @@ end
         g = SimpleWeightedGraph(srcs, dsts, weights);
         
         # Define requests
-        N_req = 5
+        N_req = 8
         max_weight = maximum(weights)
         release_times = repeat([max_weight], N_req)
+        release_times = rand(N_req)
         request_vertices = sample(2:nv(g), N_req, replace=false)
         requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
 
@@ -323,7 +361,7 @@ end
         for capacity in 1:N_req
             # Run MILP offline algorithm tests
             min_cost_milp, end_t_milp, opt_route_milp = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
-            min_cost_brute_force, end_t_brute_force, opt_route_brute_force = OfflineAlgorithm.run(g, requests, capacity, initial_t)
+            @time min_cost_brute_force, end_t_brute_force, opt_route_brute_force = OfflineAlgorithm.run(g, requests, capacity, initial_t)
 
             @test isapprox(min_cost_milp, min_cost_brute_force, atol=1e-4)
         end

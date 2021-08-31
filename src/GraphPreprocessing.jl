@@ -11,12 +11,24 @@ dists = Array{Float64, 2}(undef, 0, 2)
 
 # Returns cost of path
 # Assumes distances array has already been filled
-function path_cost(path::Vector{Int}, 
-                    initial_time::Float64=0.0)
+function path_cost(path::Vector{Int}, initial_time::Float64=0.0)
     cost = 0.0
     cur_t = initial_time
     current = 1
     for vertex in path
+        cur_t += dists[current, vertex]
+        cost += cur_t
+        current = vertex
+    end
+    cur_t += dists[current, 1]
+    return cost, cur_t
+end
+
+function midway_path_cost(path::Vector{Int}, initial_time::Float64=0.0)
+    cost = 0.0
+    cur_t = initial_time
+    current = path[1]
+    for vertex in path[2:end]
         cur_t += dists[current, vertex]
         cost += cur_t
         current = vertex
@@ -50,6 +62,35 @@ function best_path(vertices::Vector{Int},
 
     opt_paths[s_vertices] = opt_path
     return min_cost, end_time, opt_path
+end
+
+# Finds the path that minimizes sum of times to reach each vertex
+function greedy_best_path(vertices::Vector{Int}, initial_time::Float64=0.0)
+    min_cost = 0.0
+    cur_t = initial_time
+    opt_path = Vector{Int64}()
+
+    cur_vertex = 1
+    while length(vertices) > 0
+        cost = Inf64
+        next_vertex = nothing
+        for vertex in vertices
+            if dists[cur_vertex, vertex] < cost
+                cost = dists[cur_vertex, vertex]
+                next_vertex = vertex
+            end 
+        end
+        cur_t += cost
+        min_cost += cur_t
+        push!(opt_path, next_vertex)
+
+        vertices = filter(vertex -> vertex != next_vertex, vertices)
+        cur_vertex = next_vertex
+    end
+
+    s_vertices = sort(vertices)
+    opt_paths[s_vertices] = opt_path
+    return min_cost, cur_t, opt_path
 end
 
 function distance_graph(graph::SimpleWeightedGraph)

@@ -65,7 +65,9 @@ end
 function offline_algorithm(graph::SimpleWeightedGraph, 
                             requests::Vector{Request}, 
                             capacity::Int64, 
-                            initial_t::Float64)
+                            initial_t::Float64,
+                            full_search::Bool,
+                            time_limit::Float64)
     Kmin = ceil(Int, length(requests) / capacity)
     N = nv(graph)
 
@@ -82,10 +84,12 @@ function offline_algorithm(graph::SimpleWeightedGraph,
     end_t = Inf
     opt_route = Vector{Vector{Int64}}()
 
+    Klist = full_search ? (Kmin:length(requests)) : [Kmin]
     # iterate through all possible 
-    for Kmax in Kmin:length(requests)
+    for Kmax in Klist
         model = Model(Gurobi.Optimizer)
-        set_silent(model)
+        set_optimizer_attribute(model, "TimeLimit", time_limit)
+        # set_silent(model)
 
         # x[i, j, k] -> if edge (i, j) is being used in route k
         @variable(model, x[1:N+1, 1:N+1, 1:Kmax], Bin)
@@ -147,7 +151,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
 
         optimize!(model)
         
-        if termination_status(model) == MOI.OPTIMAL &&
+        if (time_limit < Inf64 || termination_status(model) == MOI.OPTIMAL) &&
                 !isapprox(objective_value(model), min_cost, atol=1e-3) && 
                 objective_value(model) < min_cost
             min_cost = objective_value(model)
@@ -162,8 +166,10 @@ end
 function run(graph::SimpleWeightedGraph, 
                 requests::Vector{Request}, 
                 capacity::Int64,
-                initial_t::Float64=0.0)
-    return offline_algorithm(graph, requests, capacity, initial_t)
+                initial_t::Float64=0.0;
+                full_search::Bool=true,
+                time_limit::Float64=Inf64)
+    return offline_algorithm(graph, requests, capacity, initial_t, full_search, time_limit)
 end
 
 end # module
