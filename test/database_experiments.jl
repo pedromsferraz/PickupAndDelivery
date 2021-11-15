@@ -1,8 +1,8 @@
 using Test, FinalProjectPedroFerraz
-using LightGraphs, SimpleWeightedGraphs, StatsBase, Random, DataFrames, XLSX, BenchmarkTools, Plots
+using Graphs, SimpleWeightedGraphs, StatsBase, Random, DataFrames, XLSX, BenchmarkTools, Plots, Query
 
 dataset_path = (@__DIR__) * "/data/goeke-2018/"
-
+file_name = "rc204C6" * ".txt"
 function read_file(file_name, distance_scaling = 1.0)
     file = readchomp(dataset_path * file_name)
     lines = split(file, r"\n")
@@ -11,12 +11,25 @@ function read_file(file_name, distance_scaling = 1.0)
     df = DataFrame(cols[1:end], rows[1])
     # df = DataFrame(x = parse.(Float64, df.x), y = parse.(Float64, df.y), 
     #                 readytime = parse.(Float64, df.ReadyTime))
-    x_coords = parse.(Float64, df.x)
-    y_coords = parse.(Float64, df.y)
-    release_times = parse.(Float64, df.ReadyTime)
+
+    origin_df = @from i in df begin
+        @where i.Type == "d"
+        @select {i.x, i.y}
+        @collect DataFrame
+    end
+    x_coord = parse.(Float64, origin_df.x)[1]
+    y_coord = parse.(Float64, origin_df.y)[1]
+
+    requests_df = @from i in df begin
+        @where i.Type == "cd" || i.Type == "cp"
+        @select {i.x, i.y, i.ReadyTime}
+        @collect DataFrame
+    end
+    x_coords = parse.(Float64, requests_df.x)
+    y_coords = parse.(Float64, requests_df.y)
+    release_times = parse.(Float64, requests_df.ReadyTime)
     
-    points = vcat([x_coords', y_coords']...)
-    points = hcat([0, 0], points)
+    points = hcat([x_coord, y_coord], vcat([x_coords', y_coords']...))
     points ./= distance_scaling
     return points, release_times
 end
@@ -36,7 +49,6 @@ function build_instance(file_name, distance_scaling = 1.0)
     
     N_req = length(release_times)
     request_vertices = 2:nv(g)
-    # request_vertices = sample(2:nv(g), N_req, replace=false)
     requests = map(i -> DataModel.Request(release_times[i], request_vertices[i]), 1:N_req)
 
     return g, requests
@@ -49,9 +61,8 @@ function run_online_tests(instance_names)
         dfs = []
         g, requests = build_instance(instance_name * ".txt")
         should_set_header = true
-        capacities = filter(c -> c < nv(g), [1, 2, 3, 5, 8])
+        capacities = filter(c -> c < nv(g), [1, 2, 3, 5])
         for capacity in capacities
-            scale_factor = 1.0
             local cost_ignore, end_t_ignore, route_ignore
             local cost_return, end_t_return, route_return
             local cost_naive, end_t_naive, route_naive
@@ -60,22 +71,18 @@ function run_online_tests(instance_names)
             local exec_time_ignore, exec_time_return, exec_time_naive, exec_time_naive_return, exec_time_compute_return
             skip = false
 
-            while scale_factor <= 1024.0
-                try
-                    # TODO: permitir que apenas o Wait and Return tenha resultados, por exemplo
-                    ((cost_naive, end_t_naive, route_naive), exec_time_naive) = @timed NaiveIgnore.run(g, requests, capacity, 8)
-                    ((cost_ignore, end_t_ignore, route_ignore), exec_time_ignore) = @timed WaitAndIgnore.run(g, requests, capacity, 8)
-                    ((cost_return, end_t_return, route_return), exec_time_return) = @timed WaitAndReturn.run(g, requests, capacity, 8)
-                    ((cost_naive_return, end_t_naive_return, route_naive_return), exec_time_naive_return) = @timed NaiveReturn.run(g, requests, capacity, 8)
-                    ((cost_compute_return, end_t_compute_return, route_compute_return), exec_time_compute_return) = @timed ComputeReturn.run(g, requests, capacity, 8)
-                    break
-                catch e
-                    println(e.msg)
-                    scale_factor *= 2.0
-                    g, requests = build_instance(instance_name * ".txt", scale_factor)
-                end
+            try
+                # TODO: permitir que apenas o Wait and Return tenha resultados, por exemplo
+                ((cost_naive, end_t_naive, route_naive), exec_time_naive) = @timed NaiveIgnore.run(g, requests, capacity, 8, 25)
+                ((cost_ignore, end_t_ignore, route_ignore), exec_time_ignore) = @timed WaitAndIgnore.run(g, requests, capacity, 8, 25)
+                ((cost_return, end_t_return, route_return), exec_time_return) = @timed WaitAndReturn.run(g, requests, capacity, 8, 25)
+                ((cost_naive_return, end_t_naive_return, route_naive_return), exec_time_naive_return) = @timed NaiveReturn.run(g, requests, capacity, 8, 25)
+                ((cost_compute_return, end_t_compute_return, route_compute_return), exec_time_compute_return) = @timed ComputeReturn.run(g, requests, capacity, 8, 25)
+            catch e
+                println(e)
+                skip = true
             end
-            if scale_factor > 1024.0
+            if skip
                 continue
             end
             costs = [cost_ignore, cost_return, cost_naive, cost_naive_return, cost_compute_return]
@@ -90,12 +97,10 @@ function run_online_tests(instance_names)
             end
             instance_array = [instance_element, repeat([missing], length(costs)-1)...]
             capacity_array = [capacity, repeat([missing], length(costs)-1)...]
-            scale_factor_array = [scale_factor, repeat([missing], length(costs)-1)...]
             algorithms = ["Wait and Ignore", "Wait and Return", "Naive Ignore", "Naive Return", "Compute Return"]
 
             df = DataFrame("Instância" => instance_array,
                             "Capacidade" => capacity_array,
-                            "Fator de escala" => scale_factor_array,
                             "Algoritmo" => algorithms,
                             "Custo" => costs,
                             "Tempo de término" => end_times,
@@ -104,6 +109,7 @@ function run_online_tests(instance_names)
                         )
             push!(dfs, df)
         end
+
         if index == 1
             main_df = dfs[1]
             for df in dfs[2:end]
@@ -117,7 +123,7 @@ function run_online_tests(instance_names)
     end
     path = "test/results/"
     mkpath(path)
-    XLSX.writetable(path * "results.xlsx", collect(DataFrames.eachcol(main_df)), DataFrames.names(main_df), overwrite=true)
+    XLSX.writetable(path * "results_large.xlsx", collect(DataFrames.eachcol(main_df)), DataFrames.names(main_df), overwrite=true)
     main_df
 end
 
@@ -143,7 +149,9 @@ plot_instance("rc204C6")
 points, release_times = read_file("rc204C6" * ".txt")
 size(points, 2)
 
-g, requests = build_instance("rc204C6" * ".txt")
+plot_instance("c101C6")
+
+g, requests = build_instance("lrc101" * ".txt")
 MilpOfflineAlgorithm.run(g, requests, 5, full_search=false, time_limit=10.0)
-ComputeReturn.run(g, requests, 5, 8)
+ComputeReturn.run(g, requests, 5, 8, 25)
 NaiveIgnore.run(g, requests, 5, 8)

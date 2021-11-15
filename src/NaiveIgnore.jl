@@ -8,14 +8,15 @@ function call_offline_algorithm(graph, requests, capacity, cur_t, request_limit)
     if request_limit == 0 || length(requests) <= request_limit
         return OfflineAlgorithm.run_multithreaded(graph, requests, capacity, cur_t)
     else
-        return MilpOfflineAlgorithm.run(graph, requests, capacity, cur_t, full_search=false, time_limit=60.0)
+        return MilpOfflineAlgorithm.run(graph, requests, capacity, cur_t, full_search=false, time_limit=20.0)
     end
 end
 
 function run(graph::SimpleWeightedGraph, 
             requests::Vector{Request}, 
             capacity::Int64,
-            request_limit::Int64 = 0)
+            request_limit::Int64 = 0,
+            milp_limit::Int64 = 0)
     GraphPreprocessing.preprocess_dists(graph)
     
     N = length(requests)
@@ -30,7 +31,7 @@ function run(graph::SimpleWeightedGraph,
         cur_t = max(cur_t, first_valid)
         valid_requests = filter(request -> request.release_time <= cur_t, remaining_requests)
         
-        if !USES_MILP && request_limit != 0 && length(valid_requests) > request_limit
+        if (!USES_MILP && request_limit != 0 && length(valid_requests) > request_limit) || (USES_MILP && milp_limit != 0 && length(valid_requests) > milp_limit)
             throw(RequestLimit("Naive Ignore: limite de pedidos excedido - tentou executar o algoritmo offline com $(length(valid_requests)) pedidos ativos."))
         end
 

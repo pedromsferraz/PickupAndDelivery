@@ -1,4 +1,4 @@
-using LightGraphs, SimpleWeightedGraphs
+using Graphs, SimpleWeightedGraphs
 using GraphPlot, Cairo, Compose
 
 # Create a random weighted graph with N vertices and M edges

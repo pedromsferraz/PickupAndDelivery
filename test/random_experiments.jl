@@ -1,5 +1,5 @@
 using Test, FinalProjectPedroFerraz
-using LightGraphs, SimpleWeightedGraphs, StatsBase, Distributions, DataFrames, XLSX, BenchmarkTools, Plots
+using Graphs, SimpleWeightedGraphs, StatsBase, Distributions, DataFrames, XLSX, BenchmarkTools, Plots
 
 # Generate an euclidean graph with N request uniformly distributed in the box [0, L]^2
 # with requests distributed ~ Exp(β)

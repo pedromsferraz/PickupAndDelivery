@@ -1,5 +1,5 @@
 using Test, FinalProjectPedroFerraz
-using LightGraphs, SimpleWeightedGraphs, StatsBase, Random #, Plots
+using Graphs, SimpleWeightedGraphs, StatsBase, Random #, Plots
 
 @testset "Offline algorithm tests" begin
     @testset "Simple small graph test" begin

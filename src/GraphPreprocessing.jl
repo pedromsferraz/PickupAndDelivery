@@ -1,6 +1,6 @@
 module GraphPreprocessing
 
-using LightGraphs, SimpleWeightedGraphs, Combinatorics
+using Graphs, SimpleWeightedGraphs, Combinatorics
 
 # Used for preprocessing vertices optimal paths
 # Maps a set of vertices to the path of minimum cost on the graph

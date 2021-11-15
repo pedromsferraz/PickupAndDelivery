@@ -1,11 +1,11 @@
 module MilpOfflineAlgorithm
 
 # Gurobi setup
-# ENV["GUROBI_HOME"] = "/Library/gurobi912/mac64"
+# ENV["GUROBI_HOME"] = "C:\\gurobi912\\win64"
 # using Pkg
 # Pkg.add("Gurobi")
 # Pkg.build("Gurobi")
-using ..DataModel, ..GraphPreprocessing, LightGraphs, SimpleWeightedGraphs, JuMP, Gurobi
+using ..DataModel, ..GraphPreprocessing, Graphs, SimpleWeightedGraphs, JuMP, Gurobi
 
 function get_route(x::Array{Float64,3}, d::Vector{Int64})
     subgraph_route = Vector{Vector{Int64}}()
@@ -60,14 +60,17 @@ function preprocess_graph(graph::SimpleWeightedGraph, d::Vector{Int64})
     return g
 end
 
-# Mixed-integer programming implementation of offline algorithm
-# Note: This version assume all requests are already active
-function offline_algorithm(graph::SimpleWeightedGraph, 
-                            requests::Vector{Request}, 
-                            capacity::Int64, 
-                            initial_t::Float64,
-                            full_search::Bool,
-                            time_limit::Float64)
+function get_next_vertex(g, current_vertex, request_dest)
+    w = filter(x -> x != 0.0, collect(g.weights[current_vertex, request_dest]))
+    minw = minimum(w)
+    argminw = argmin(w)
+    return minw, request_dest[argminw]
+end
+
+function greedy_warm_start(graph::SimpleWeightedGraph, 
+                        requests::Vector{Request}, 
+                        capacity::Int64, 
+                        initial_t::Float64)
     Kmin = ceil(Int, length(requests) / capacity)
     N = nv(graph)
 
@@ -77,7 +80,60 @@ function offline_algorithm(graph::SimpleWeightedGraph,
         d[request.destination] = 1
     end
     g = preprocess_graph(graph, d)
+    N = nv(g) - 1
+    x = zeros(N+1, N+1, Kmin)
+    ω = zeros(N+1, Kmin)
 
+    request_dest = [i for i in 2:N]
+    cur_vertex = 1
+    cur_t = initial_t
+    cur_k = 1
+
+    ω[cur_vertex, cur_k] = cur_t
+    while length(request_dest) > 0
+        cur_vertex = 1
+        fulfilled_requests = 0
+        while length(request_dest) > 0 && fulfilled_requests < capacity
+            cost, next_vertex = get_next_vertex(g, cur_vertex, request_dest)
+            cur_t += cost
+            x[cur_vertex, next_vertex, cur_k] = 1.0
+            ω[next_vertex, cur_k] = cur_t
+
+            request_dest = filter(vertex -> vertex != next_vertex, request_dest)
+            cur_vertex = next_vertex
+            fulfilled_requests += 1
+        end
+        next_vertex = N+1
+        cur_t += g.weights[cur_vertex, N+1]
+        x[cur_vertex, next_vertex, cur_k] = 1.0
+        ω[next_vertex, cur_k] = cur_t
+        cur_k += 1
+        if cur_k <= Kmin
+            ω[1, cur_k] = cur_t
+        end
+    end
+
+    return x, ω
+end
+
+# Mixed-integer programming implementation of offline algorithm
+# Note: This version assume all requests are already active
+function offline_algorithm(graph::SimpleWeightedGraph, 
+                            requests::Vector{Request}, 
+                            capacity::Int64, 
+                            initial_t::Float64,
+                            full_search::Bool,
+                            time_limit::Float64,
+                            warm_start::Bool)
+    Kmin = ceil(Int, length(requests) / capacity)
+    N = nv(graph)
+
+    # d[i] = 1 if there is demand on node i, 0 otherwise
+    d = zeros(Int, N)
+    for request in requests
+        d[request.destination] = 1
+    end
+    g = preprocess_graph(graph, d)
     N = nv(g) - 1
 
     min_cost = Inf
@@ -89,6 +145,7 @@ function offline_algorithm(graph::SimpleWeightedGraph,
     for Kmax in Klist
         model = Model(Gurobi.Optimizer)
         set_optimizer_attribute(model, "TimeLimit", time_limit)
+        set_optimizer_attribute(model, "NumericFocus", 2)
         # set_silent(model)
 
         # x[i, j, k] -> if edge (i, j) is being used in route k
@@ -96,6 +153,13 @@ function offline_algorithm(graph::SimpleWeightedGraph,
 
         # ω[i, k] -> time at which request node i is served in route k
         @variable(model, ω[1:N+1, 1:Kmax] >= 0.0)
+
+        # set warm start
+        if warm_start
+            initial_x, initial_ω = greedy_warm_start(graph, requests, capacity, initial_t)
+            set_start_value.(x, initial_x)
+            set_start_value.(ω, initial_ω)
+        end
 
         # objective: minimize sum of serving time for every request
         @objective(model, Min, sum(sum(ω[i, k] for k in 1:Kmax) for i in 2:N))
@@ -168,8 +232,9 @@ function run(graph::SimpleWeightedGraph,
                 capacity::Int64,
                 initial_t::Float64=0.0;
                 full_search::Bool=true,
-                time_limit::Float64=Inf64)
-    return offline_algorithm(graph, requests, capacity, initial_t, full_search, time_limit)
+                time_limit::Float64=Inf64,
+                warm_start::Bool=true)
+    return offline_algorithm(graph, requests, capacity, initial_t, full_search, time_limit, warm_start)
 end
 
 end # module
