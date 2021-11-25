@@ -187,7 +187,6 @@ end
         
         # Run Wait And Return algorithm tests
         cost, end_t, route = WaitAndReturn.run(g, requests, capacity)
-        cost, end_t, route = ComputeReturn.run(g, requests, capacity)
 
         @test cost ≈ 405.0
         @test end_t ≈ 160.0
@@ -361,7 +360,7 @@ end
         for capacity in 1:N_req
             # Run MILP offline algorithm tests
             min_cost_milp, end_t_milp, opt_route_milp = MilpOfflineAlgorithm.run(g, requests, capacity, initial_t)
-            @time min_cost_brute_force, end_t_brute_force, opt_route_brute_force = OfflineAlgorithm.run(g, requests, capacity, initial_t)
+            @time min_cost_brute_force, end_t_brute_force, opt_route_brute_force = OfflineAlgorithm.run_multithreaded(g, requests, capacity, initial_t)
 
             @test isapprox(min_cost_milp, min_cost_brute_force, atol=1e-4)
         end

@@ -42,19 +42,14 @@ function run(graph::SimpleWeightedGraph,
         partway_valid_requests = filter(request -> cur_t < request.release_time < end_t, remaining_requests)
         sort!(partway_valid_requests, by = request -> request.release_time)
 
-        # Calculate maximal distance from requests to origin
-        requests_dests = map(request -> request.destination, valid_requests)
-        maximimal_dist = maximum(vertex -> GraphPreprocessing.dists[1, vertex], requests_dests)
-
         flat_route = opt_route[1] # collect(Iterators.flatten(opt_route))
         route_length = length(flat_route)
         flat_route = flat_route[1:min(route_length, capacity)]
         travel_route = Vector{Int64}()
         prev_vertex = 1
         num_new_requests = 0
-        num_unserved_requests = length(flat_route)
         should_return_origin = false
-        for vertex in flat_route
+        for (index, vertex) in enumerate(flat_route)
             next_t = cur_t + GraphPreprocessing.dists[prev_vertex, vertex]
 
             # Check if request(s) will become valid during this edge
@@ -64,8 +59,14 @@ function run(graph::SimpleWeightedGraph,
             for partedge_request in partedge_valid_requests
                 return_prev_time = partedge_request.release_time - cur_t
                 return_origin_time = return_prev_time + GraphPreprocessing.dists[prev_vertex, 1]
-                num_new_requests += 1
-                
+                num_new_requests += 1                
+
+                # Calculate maximal distance from requests to origin
+                maximimal_dist = maximum(vertex -> GraphPreprocessing.dists[1, vertex], flat_route[index:end])
+
+                # Calculate number of unserved requests
+                num_unserved_requests = length(flat_route[index:end])
+
                 # If condition is met, return to origin
                 if return_origin_time / maximimal_dist <= num_new_requests / (num_new_requests + num_unserved_requests)
                     # Time travelled so far + time to return to vertex
@@ -82,7 +83,6 @@ function run(graph::SimpleWeightedGraph,
             cur_t += GraphPreprocessing.dists[prev_vertex, vertex]
             cost += cur_t
             prev_vertex = vertex
-            num_unserved_requests -= 1
             push!(travel_route, vertex)
         end
         cur_t += GraphPreprocessing.dists[prev_vertex, 1]

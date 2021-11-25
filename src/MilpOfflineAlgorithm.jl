@@ -1,7 +1,7 @@
 module MilpOfflineAlgorithm
 
 # Gurobi setup
-# ENV["GUROBI_HOME"] = "C:\\gurobi912\\win64"
+# ENV["GUROBI_HOME"] = "/Library/gurobi912/mac64/"
 # using Pkg
 # Pkg.add("Gurobi")
 # Pkg.build("Gurobi")
